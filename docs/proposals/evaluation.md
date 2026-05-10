@@ -4,7 +4,7 @@ This proposal defines end-to-end benchmark evaluation for the payload processor 
 The initial proposal covers evaluating the following scenarios:
 
 running multiple models on different pools - user specifies the model directly.
-running multiple models on different pools - model/pool is picked by scorer.
+running multiple models on different pools - model/pool is picked by ModelSelector.
 
 ## Benchmarking Goals
 
@@ -24,7 +24,7 @@ The collected metrics will be used to evaluate Overheads and inference performan
 We will start with an initial list of collected metrics that will expand as needed:
 
 1. Concurrent requests - The number of concurrent requests the IPP handles at a given time.
-2. queue length - The number of requests waiting to be served by the IPP at a given time.
+2. Queue length - The number of requests waiting to be served by the IPP at a given time.
 3. GPU utilization - The allocated GPU divided by actual GPU used in a given time.
 3. Total request latency - End to end latency of a specific request.
 4. TTFT - Time to first token of a specific request.
