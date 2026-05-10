@@ -25,11 +25,11 @@ Our collected metrics will be used to evaluate Overheads and Prediction quality,
 We will start with an initial list of collected metrics that will expand as needed:
 
 1. Concurrent requests - The number of concurrent requests the IPP handles at a given time.
-2. queue length - The number of requests waiting to be served by the IPP at a given time.
-3. GPU utilization - The allocated GPU divided by actual GPU used in a given time.
-3. Total request latency - End to end latency of a specific request.
-4. TTFT - Time to first token of a specific request.
-5. TPOT - Time per output token of a specific request.
+2. Queue length - The number of requests waiting to be served by the IPP at a given time.
+3. GPU utilization - The actual GPU used divided by allocated GPU in a given time.
+4. Total request latency - End to end latency of a specific request.
+5. TTFT - Time to first token of a specific request.
+6. TPOT - Time per output token of a specific request.
 
 ### Overheads evaluation
 
@@ -42,18 +42,18 @@ Goal: verify that the overhead introduced is minor.
 
 Goal: verify prediction quality.
 
-For each scored request, the scorer's per-candidate-pool predictions are recorded alongside the actual performance metrics of requests (e.g. TTFT). 
+For each scored request, the scorer's per-candidate-pool predictions are recorded alongside the actual performance metrics of requests (e.g. TTFT).
 The actual metrics will act as a ground truth of requests.
 
 From these collected metrics (ground truth and scorer's predictions) we compute per run the prediction error, MAE and MAPE between predicted and observed latency.
-Later on, These results could be used to optimize the predictions quality.
+Later on, these results could be used to optimize the predictions quality.
 
 ## Configurations
 
 We evaluate five stack configurations:
 
 - **Configuration A**: one pool, one model (no IPP) - same number of model serving pods
-- **Configuration B**: one pool, one model - same number of model serving pods
+- **Configuration B**: one pool, one model (with IPP) - same number of model serving pods
 - **Configuration C**: two pools running the same model - same number of model serving pods
 - **Configuration D**: two pools running the same model - 2/3 ratio of model serving pods between pools
 - **Configuration E**: two pools running different models of same class (e.g. "Frontier / Large") - 2/3 ratio of model serving pods between pools
