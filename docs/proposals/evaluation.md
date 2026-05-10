@@ -4,7 +4,7 @@ This proposal defines end-to-end benchmark evaluation for the payload processor 
 The initial proposal covers evaluating the following scenarios:
 
 running multiple models on different pools - user specifies the model directly.
-running multiple models on different pools - model/pool is picked by scorer.
+running multiple models on different pools - model/pool is picked by ModelSelector.
 
 ## Benchmarking Goals
 
