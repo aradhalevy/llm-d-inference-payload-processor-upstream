@@ -25,11 +25,11 @@ We will start with an initial list of collected metrics that will expand as need
 
 1. Concurrent requests - The number of concurrent requests the IPP handles at a given time.
 2. Queue length - The number of requests waiting to be served by the IPP at a given time.
-3. GPU utilization - The allocated GPU divided by actual GPU used in a given time.
-3. Total request latency - End to end latency of a specific request.
-4. TTFT - Time to first token of a specific request.
-5. TPOT - Time per output token of a specific request.
-6. Token (input, output, cached) count.
+3. GPU utilization - The GPU usage divided by allocated GPU used in a given time.
+4. Total request latency - End to end latency of a specific request.
+5. TTFT - Time to first token of a specific request.
+6. TPOT - Time per output token of a specific request.
+7. Token (input, output, cached) count.
 
 ### Baseline evaluation
 
@@ -41,7 +41,7 @@ IPP configured with a filter/scorer/picker pipeline for the following scenarios:
 - One pool, one model - same number of model serving pods
 - Two pools running the same model - same number of model serving pods
 - Two pools running the same model - 2/3 ratio of model serving pods between pools
-- two pools running different models of same class (e.g. "Frontier / Large") - 2/3 ratio of model serving pods between pools
+- Two pools running different models of same class (e.g. "Frontier / Large") - 2/3 ratio of model serving pods between pools
 
 ## Workload
 
@@ -52,10 +52,10 @@ Workloads come from the benchmark templates that ship with llm-d:
   1. ShareGPT - Emulates real chatbot conversations. Short, varied inputs, low prefix overlap across distinct conversations.
   2. SharedPrefix - Multi-tenant serving where N groups share a system prompt, each group has M users asking questions. A prefix-cache heavy benchmark.
 
-- **Concurrency:**  concurrency will be increased gradually, to see how overhead and prediction quality scale. 
+- **Concurrency:**  Concurrency will be increased gradually, to see how overhead and prediction quality scale.
 
 ## Future Steps
 
-Evaluate against More Use cases (more datasets that work with inference-perf, possibly different Harnesses).
+Evaluate against more use cases (more datasets that work with inference-perf, possibly different Harnesses).
 
-Evaluate the cost Scorer, adding relevant metrics (e.g price list of million tokens per model).
+Evaluate the cost Scorer, adding relevant metrics (e.g., price list of million tokens per model).
