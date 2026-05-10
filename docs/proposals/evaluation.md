@@ -20,7 +20,7 @@ In the proposal we define the metrics and initial set of scenarios.
 
 ### Metrics
 
-The collected metrics will be used to evaluate Overheads and inference performance, and include metrics about the system load and state (e.g. queue length), as well as metrics about the performance on specific requests (e.g TTFT).
+The collected metrics will be used to evaluate overheads and inference performance, and include metrics about the system load and state (e.g., queue length), as well as metrics about the performance on specific requests (e.g TTFT) and token counts for actual requests' cost calculation (input tokens, output tokens, and cached tokens).
 We will start with an initial list of collected metrics that will expand as needed:
 
 1. Concurrent requests - The number of concurrent requests the IPP handles at a given time.
