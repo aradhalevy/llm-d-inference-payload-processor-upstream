@@ -8,20 +8,19 @@ running multiple models on different pools - model/pool is picked by scorer.
 
 ## Benchmarking Goals
 
-We want to evaluate the IPP and the Filter / Scorer / Picker components performance, across two major aspects:
+IPP needs to be evaluated across two major aspects:
 
-1. **Overheads** — verify that the overhead introduced by the IPP and by each component (Filter/Scorer/Picker) is minor, both end-to-end and per-component in isolation.
-2. **Prediction quality** — Evaluate how close each scorer's predictions are to the actual latency, and whether the Picker therefore picks the right model. This could be later used to optimize the scorer.
+1. **Overheads** — understand the overhead (if any) introduced by the IPP and by each component (Filter/Scorer/Picker). Useful for evaluating functionality introduced in IPP.
+2. **Inference performance** — Evaluate the end-to-end system behavior for various scenarios. E.g., evaluate model picking, etc.
 
 ## Evaluation Approach
 
 The evaluation will be driven by the llm-d-benchmark framework. It handles stack standup, workload execution, teardown, and analysis.
-
-As our project progresses, we would first focus on computing overhead statistics and in a later stage add prediction quality statistics as well.
+In the proposal we define the metrics and initla set of scenarios.
 
 ### Metrics
 
-Our collected metrics will be used to evaluate Overheads and Prediction quality, and understand the system behaviour. We aim to collect metrics about the system load and state (e.g. queue length), as well as metrics about the performance on specific requests (e.g TTFT).
+The collected metrics will be used to evaluate Overheads and inference performance, and include metrics about the system load and state (e.g. queue length), as well as metrics about the performance on specific requests (e.g TTFT).
 We will start with an initial list of collected metrics that will expand as needed:
 
 1. Concurrent requests - The number of concurrent requests the IPP handles at a given time.
@@ -30,33 +29,19 @@ We will start with an initial list of collected metrics that will expand as need
 3. Total request latency - End to end latency of a specific request.
 4. TTFT - Time to first token of a specific request.
 5. TPOT - Time per output token of a specific request.
+6. Token (input, output, cached) count.
 
-### Overheads evaluation
+### Baseline evaluation
 
-Goal: verify that the overhead introduced is minor.
+- evaluate metrics with IPP in the path (minimal plugins only) vs. with it bypassed and request routed directly to the appropriate InferencePool.
 
-- **IPP baseline overhead** — evaluate metrics with IPP in the path (default plugins only) vs. with it bypassed and request routed directly to the appropriate InferencePool.
-- **Per-component overhead** —  evaluate metrics with the IPP running each component + other trivial components (e.g. latency Scorer with trivial Filter and Picker) vs. the IPP baseline above.
+### Latency evaluation
 
-### Prediction Quality evaluation
-
-Goal: verify prediction quality.
-
-For each scored request, the scorer's per-candidate-pool predictions are recorded alongside the actual performance metrics of requests (e.g. TTFT). 
-The actual metrics will act as a ground truth of requests.
-
-From these collected metrics (ground truth and scorer's predictions) we compute per run the prediction error, MAE and MAPE between predicted and observed latency.
-Later on, These results could be used to optimize the predictions quality.
-
-## Configurations
-
-We evaluate five stack configurations:
-
-- **Configuration A**: one pool, one model (no IPP) - same number of model serving pods
-- **Configuration B**: one pool, one model - same number of model serving pods
-- **Configuration C**: two pools running the same model - same number of model serving pods
-- **Configuration D**: two pools running the same model - 2/3 ratio of model serving pods between pools
-- **Configuration E**: two pools running different models of same class (e.g. "Frontier / Large") - 2/3 ratio of model serving pods between pools
+IPP configured with a filter/scorer/picker pipeline for the following scenarios:
+- One pool, one model - same number of model serving pods
+- Two pools running the same model - same number of model serving pods
+- Two pools running the same model - 2/3 ratio of model serving pods between pools
+- two pools running different models of same class (e.g. "Frontier / Large") - 2/3 ratio of model serving pods between pools
 
 ## Workload
 
