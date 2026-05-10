@@ -16,7 +16,7 @@ IPP needs to be evaluated across two major aspects:
 ## Evaluation Approach
 
 The evaluation will be driven by the llm-d-benchmark framework. It handles stack standup, workload execution, teardown, and analysis.
-In the proposal we define the metrics and initla set of scenarios.
+In the proposal we define the metrics and initial set of scenarios.
 
 ### Metrics
 
