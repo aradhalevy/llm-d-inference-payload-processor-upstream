@@ -41,6 +41,7 @@ IPP configured with a filter/scorer/picker pipeline for the following scenarios:
 - One pool, one model - same number of model serving pods
 - Two pools running the same model - same number of model serving pods
 - Two pools running the same model - 2/3 ratio of model serving pods between pools
+- Two pools running different models of same class (e.g. "Frontier / Large") -  same number of model serving pods
 - Two pools running different models of same class (e.g. "Frontier / Large") - 2/3 ratio of model serving pods between pools
 
 ## Workload
