@@ -45,30 +45,30 @@ func ModelSelectorPluginFactory(name string, parameters json.RawMessage, handle 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse model-selector config: %w", err)
 	}
-	profile, err := buildModelSelectorProfile(handle, cfg)
+	pipeline, err := buildModelSelectorPipeline(handle, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build model selector profile: %w", err)
+		return nil, fmt.Errorf("failed to build model selector pipeline: %w", err)
 	}
-	return NewModelSelectorPlugin(profile, handle.Datastore()).WithName(name), nil
+	return NewModelSelectorPlugin(pipeline, handle.Datastore()).WithName(name), nil
 }
 
 // NewModelSelectorPlugin creates a ModelSelector RequestProcessor plugin.
 // Candidate models are read from the Datastore on each request.
-// Filter, Scorer, and Picker plugins are sourced from profile; if no Picker is present,
+// Filter, Scorer, and Picker plugins are sourced from pipeline; if no Picker is present,
 // MaxScorePicker is used as the default.
-func NewModelSelectorPlugin(profile *ms.ModelSelectorProfile, datastore datalayer.Datastore) *ModelSelectorPlugin {
+func NewModelSelectorPlugin(pipeline *ms.ModelSelectorPipeline, datastore datalayer.Datastore) *ModelSelectorPlugin {
 	return &ModelSelectorPlugin{
 		typedName: plugin.TypedName{Type: ModelSelectorPluginType, Name: ModelSelectorPluginType},
-		selector:  ms.NewModelSelector(profile),
+		selector:  ms.NewModelSelector(pipeline),
 		datastore: datastore,
 	}
 }
 
-// buildModelSelectorProfile builds a ModelSelectorProfile from the given config.
+// buildModelSelectorPipeline builds a ModelSelectorPipeline from the given config.
 // Each pluginRef is resolved via the handle. Scorers must specify a weight.
 // If no Picker is configured, MaxScorePicker is used as the default.
-func buildModelSelectorProfile(handle plugin.Handle, cfg *ModelSelectorPluginConfig) (*ms.ModelSelectorProfile, error) {
-	profile := ms.NewModelSelectorProfile()
+func buildModelSelectorPipeline(handle plugin.Handle, cfg *ModelSelectorPluginConfig) (*ms.ModelSelectorPipeline, error) {
+	pipeline := ms.NewModelSelectorPipeline()
 
 	var hasPicker bool
 	var pluginsToAdd []plugin.Plugin
@@ -90,15 +90,15 @@ func buildModelSelectorProfile(handle plugin.Handle, cfg *ModelSelectorPluginCon
 		}
 	}
 
-	if err := profile.AddPlugins(pluginsToAdd...); err != nil {
+	if err := pipeline.AddPlugins(pluginsToAdd...); err != nil {
 		return nil, err
 	}
 
 	if !hasPicker {
-		profile.WithPicker(maxscore.NewMaxScorePicker())
+		pipeline.WithPicker(maxscore.NewMaxScorePicker())
 	}
 
-	return profile, nil
+	return pipeline, nil
 }
 
 // ModelSelectorPlugin is a RequestProcessor that runs the ModelSelector

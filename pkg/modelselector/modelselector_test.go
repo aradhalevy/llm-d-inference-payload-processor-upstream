@@ -70,11 +70,11 @@ func TestSelect(t *testing.T) {
 			}
 			picker := &testPicker{typedName: plugin.TypedName{Type: "test-picker", Name: "max-score"}}
 
-			profile := NewModelSelectorProfile().
+			pipeline := NewModelSelectorPipeline().
 				WithScorers(NewWeightedScorer(scorer, 1.0)).
 				WithPicker(picker)
 
-			selector := NewModelSelector(profile)
+			selector := NewModelSelector(pipeline)
 
 			result, err := selector.Select(context.Background(), requesthandling.NewInferenceRequest(), plugin.NewCycleState(), tt.models)
 
@@ -133,12 +133,12 @@ func TestSelectWithFilterAndScorer(t *testing.T) {
 
 	picker := &testPicker{typedName: plugin.TypedName{Type: "test-picker", Name: "max-score"}}
 
-	profile := NewModelSelectorProfile().
+	pipeline := NewModelSelectorPipeline().
 		WithFilters(filter).
 		WithScorers(NewWeightedScorer(scorer, 1.0)).
 		WithPicker(picker)
 
-	selector := NewModelSelector(profile)
+	selector := NewModelSelector(pipeline)
 
 	result, err := selector.Select(context.Background(), requesthandling.NewInferenceRequest(), plugin.NewCycleState(), []datalayer.Model{modelA, modelB, modelC})
 	if err != nil {

@@ -86,9 +86,9 @@ func mustFactory(t *testing.T, parameters json.RawMessage, handle *fakeHandle) *
 	return plug.(*ModelSelectorPlugin)
 }
 
-// profile returns the ModelSelectorProfile for inspection in tests.
-func profile(p *ModelSelectorPlugin) *ms.ModelSelectorProfile {
-	return p.selector.Profile()
+// pipeline returns the ModelSelectorPipeline for inspection in tests.
+func pipeline(p *ModelSelectorPlugin) *ms.ModelSelectorPipeline {
+	return p.selector.Pipeline()
 }
 
 // TestProcessRequestSelectsFromDatastoreModels checks that the selected model is one of the candidates registered in the datastore.
@@ -134,20 +134,20 @@ func TestTypedName(t *testing.T) {
 // TestFactoryUsesDefaultMaxScorePickerWhenNoPluginsConfigured checks that MaxScorePicker is used as the default when plugins list is empty.
 func TestFactoryUsesDefaultMaxScorePickerWhenNoPluginsConfigured(t *testing.T) {
 	thePlugin := mustFactory(t, json.RawMessage(`{}`), newFakeHandle("model-a"))
-	picker := profile(thePlugin).Picker()
+	picker := pipeline(thePlugin).Picker()
 	if picker == nil || picker.TypedName().Type != maxscore.MaxScorePickerType {
 		t.Errorf("expected default picker type %q, got %v", maxscore.MaxScorePickerType, picker)
 	}
 }
 
-// TestFactoryWiresScorerFromParameters checks that a scorer plugin referenced in parameters is added to the profile with the given weight.
+// TestFactoryWiresScorerFromParameters checks that a scorer plugin referenced in parameters is added to the pipeline with the given weight.
 func TestFactoryWiresScorerFromParameters(t *testing.T) {
 	scorer := costaware.NewCostScorer()
 	handle := newFakeHandle("model-a", "model-b")
 	handle.AddPlugin(scorer.TypedName().Name, scorer)
 
 	p := mustFactory(t, json.RawMessage(`{"plugins":[{"pluginRef":"cost-scorer","weight":2.0}]}`), handle)
-	scorers := profile(p).Scorers()
+	scorers := pipeline(p).Scorers()
 	if len(scorers) != 1 || scorers[0].TypedName().Type != costaware.CostScorerType {
 		t.Errorf("expected one scorer of type %q, got %v", costaware.CostScorerType, scorers)
 	}
@@ -163,7 +163,7 @@ func TestFactoryWiresPickerFromParameters(t *testing.T) {
 	handle.AddPlugin(picker.TypedName().Name, picker)
 
 	p := mustFactory(t, json.RawMessage(`{"plugins":[{"pluginRef":"max-score-picker"}]}`), handle)
-	got := profile(p).Picker()
+	got := pipeline(p).Picker()
 	if got == nil || got.TypedName().Type != maxscore.MaxScorePickerType {
 		t.Errorf("expected picker type %q, got %v", maxscore.MaxScorePickerType, got)
 	}
@@ -234,7 +234,7 @@ func TestFactoryPluginImplementingBothScorerAndFilter(t *testing.T) {
 	handle.AddPlugin("dual", dual)
 
 	p := mustFactory(t, json.RawMessage(`{"plugins":[{"pluginRef":"dual","weight":1.0}]}`), handle)
-	prof := profile(p)
+	prof := pipeline(p)
 	if len(prof.Filters()) != 1 || prof.Filters()[0].TypedName().Name != "dual" {
 		t.Errorf("expected dual in filters, got %v", prof.Filters())
 	}

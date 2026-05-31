@@ -258,7 +258,7 @@ type mockPicker struct{ mockPlugin }
 // compile-time type assertion
 var _ modelselector.Picker = &mockPicker{}
 
-func (m *mockPicker) Pick(ctx context.Context, cycleState *plugin.CycleState, scoredModels []*modelselector.ScoredModel) *modelselector.ProfileRunResult {
+func (m *mockPicker) Pick(ctx context.Context, cycleState *plugin.CycleState, scoredModels []*modelselector.ScoredModel) *modelselector.PipelineRunResult {
 	return nil
 }
 
