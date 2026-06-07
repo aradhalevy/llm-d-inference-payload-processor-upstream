@@ -155,15 +155,24 @@ postProcessing:
   - pluginRef: test-post-processor
 `
 
-// datalayerSuccessConfigText has a valid notification-source reference.
+// datalayerSuccessConfigText has valid datalayer references across all three categories.
 const datalayerSuccessConfigText = `
 apiVersion: llm-d.ai/v1alpha1
 kind: PayloadProcessorConfig
 plugins:
-- name: my-notif-source
-  type: notification-source
-notificationSources:
-- pluginRef: my-notif-source
+- name: test-col
+  type: test-collector
+- name: test-ext
+  type: test-extractor
+- name: test-ds
+  type: test-datasource
+datalayer:
+  collectors:
+  - pluginRef: test-col
+  extractors:
+  - pluginRef: test-ext
+  datasources:
+  - pluginRef: test-ds
 `
 
 // datalayerMissingRefConfigText references a plugin that does not exist.
@@ -175,21 +184,9 @@ plugins:
   type: test-plugin
   parameters:
     threshold: 10
-notificationSources:
-- pluginRef: does-not-exist
-`
-
-// datalayerWrongTypeConfigText references a plugin that is not a NotificationSource.
-const datalayerWrongTypeConfigText = `
-apiVersion: llm-d.ai/v1alpha1
-kind: PayloadProcessorConfig
-plugins:
-- name: test1
-  type: test-plugin
-  parameters:
-    threshold: 10
-notificationSources:
-- pluginRef: test1
+datalayer:
+  extractors:
+  - pluginRef: does-not-exist
 `
 
 // modelSelectorAllPluginTypesText wires a Filter, a weighted Scorer, and a Picker
@@ -317,43 +314,6 @@ profiles:
     request:
     - pluginRef: model-selector
     - pluginRef: bare-plugin
-`
-
-// pollingSourceSuccessConfigText has a valid polling-source reference.
-const pollingSourceSuccessConfigText = `
-apiVersion: llm-d.ai/v1alpha1
-kind: PayloadProcessorConfig
-plugins:
-- name: my-polling-source
-  type: polling-source
-pollingSources:
-- pluginRef: my-polling-source
-`
-
-// pollingSourceMissingRefConfigText references a plugin that does not exist.
-const pollingSourceMissingRefConfigText = `
-apiVersion: llm-d.ai/v1alpha1
-kind: PayloadProcessorConfig
-plugins:
-- name: test1
-  type: test-plugin
-  parameters:
-    threshold: 10
-pollingSources:
-- pluginRef: does-not-exist
-`
-
-// pollingSourceWrongTypeConfigText references a plugin that is not a PollingSource.
-const pollingSourceWrongTypeConfigText = `
-apiVersion: llm-d.ai/v1alpha1
-kind: PayloadProcessorConfig
-plugins:
-- name: test1
-  type: test-plugin
-  parameters:
-    threshold: 10
-pollingSources:
-- pluginRef: test1
 `
 
 // errorBadPreProcessorsText represents a reference to a plugin that is not a pre-processor

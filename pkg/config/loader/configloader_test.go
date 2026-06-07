@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,12 +28,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	configapi "github.com/llm-d/llm-d-inference-payload-processor/apix/config/v1alpha1"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/common/observability/logging"
+	datalayerpkg "github.com/llm-d/llm-d-inference-payload-processor/pkg/datalayer"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/interface/datalayer"
+	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/interface/datalayer/datasource"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/interface/modelselector"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/interface/plugin"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/interface/requesthandling"
-	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/datalayer/notificationsource"
-	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/datalayer/pollingsource"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/modelselector/picker/maxscore"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/modelselector/scorer/costaware"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/requesthandling/basemodelextractor"
@@ -54,6 +55,9 @@ const (
 	testRequestProcType  = "test-request-processor"
 	testResponseProcType = "test-response-processor"
 	testScorerType       = "test-scorer"
+	testExtractorType    = "test-extractor"
+	testCollectorType    = "test-collector"
+	testDataSourceType   = "test-datasource"
 )
 
 // TestLoadRawConfiguration verifies that YAML config text is parsed into the expected PayloadProcessorConfig structure.
@@ -210,7 +214,7 @@ func TestInstantiatePlugins(t *testing.T) {
 			}
 
 			// 2. Instantiate
-			handle := plugin.NewHandle(context.Background(), nil, nil)
+			handle := plugin.NewHandle(context.Background(), nil, nil, nil)
 			err = instantiatePlugins(rawConfig.Plugins, handle)
 
 			if tc.wantErr {
@@ -303,7 +307,7 @@ func TestBuildProfiles(t *testing.T) {
 			rawConfig, err := loadRawConfiguration([]byte(tc.configText), logger)
 			require.NoError(t, err, "setup: loadRawConfiguration failed")
 
-			handle := plugin.NewHandle(context.Background(), nil, nil)
+			handle := plugin.NewHandle(context.Background(), nil, nil, nil)
 			err = instantiatePlugins(rawConfig.Plugins, handle)
 			require.NoError(t, err, "setup: instantiatePlugins failed")
 
@@ -386,7 +390,7 @@ func TestBuildPreAndPostProcessors(t *testing.T) {
 			rawConfig, err := loadRawConfiguration([]byte(tc.configText), logger)
 			require.NoError(t, err, "setup: loadRawConfiguration failed")
 
-			handle := plugin.NewHandle(context.Background(), nil, nil)
+			handle := plugin.NewHandle(context.Background(), nil, nil, nil)
 			err = instantiatePlugins(rawConfig.Plugins, handle)
 			require.NoError(t, err, "setup: instantiatePlugins failed")
 
@@ -410,116 +414,51 @@ func TestBuildPreAndPostProcessors(t *testing.T) {
 	}
 }
 
-// TestBuildNotificationSources verifies that notification source plugins are resolved and built from config refs.
-func TestBuildNotificationSources(t *testing.T) {
+// TestBuildDatalayerSources verifies that datalayer plugins are resolved and registered from config refs.
+func TestBuildDatalayerSources(t *testing.T) {
 	// Not parallel because it modifies global plugin registry.
-	plugin.Register(notificationsource.PluginType, notificationsource.Factory)
 	registerTestPlugins(t)
 
 	tests := []struct {
 		name       string
 		configText string
-		wantLen    int
 		wantErr    bool
 	}{
 		{
-			name:       "Success - no notification sources",
+			name:       "Success - no datalayer sources",
 			configText: successConfigText,
-			wantLen:    0,
 		},
 		{
-			name:       "Success - valid notification source ref",
+			name:       "Success - valid datalayer refs for all categories",
 			configText: datalayerSuccessConfigText,
-			wantLen:    1,
 		},
 		{
 			name:       "Error - missing plugin ref",
 			configText: datalayerMissingRefConfigText,
 			wantErr:    true,
 		},
-		{
-			name:       "Error - plugin is not a NotificationSource",
-			configText: datalayerWrongTypeConfigText,
-			wantErr:    true,
-		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := logging.NewTestLogger()
+			// Initialize fake processor for testing
+			processor := datalayerpkg.NewFakeProcessor()
 
 			rawConfig, err := loadRawConfiguration([]byte(tc.configText), logger)
 			require.NoError(t, err, "setup: loadRawConfiguration failed")
 
-			handle := plugin.NewHandle(context.Background(), nil, nil)
+			handle := plugin.NewHandle(context.Background(), nil, nil, nil)
 			err = instantiatePlugins(rawConfig.Plugins, handle)
 			require.NoError(t, err, "setup: instantiatePlugins failed")
 
-			sources, err := buildNotificationSources(rawConfig.NotificationSources, handle)
+			err = buildDatalayerSources(rawConfig.Datalayer, handle, processor)
 
 			if tc.wantErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			require.Len(t, sources, tc.wantLen)
-		})
-	}
-}
-
-// TestBuildPollingSources verifies that polling source plugins are resolved and built from config refs.
-func TestBuildPollingSources(t *testing.T) {
-	// Not parallel because it modifies global plugin registry.
-	plugin.Register(pollingsource.PluginType, pollingsource.Factory)
-	registerTestPlugins(t)
-
-	tests := []struct {
-		name       string
-		configText string
-		wantLen    int
-		wantErr    bool
-	}{
-		{
-			name:       "Success - no polling sources",
-			configText: successConfigText,
-			wantLen:    0,
-		},
-		{
-			name:       "Success - valid polling source ref",
-			configText: pollingSourceSuccessConfigText,
-			wantLen:    1,
-		},
-		{
-			name:       "Error - missing plugin ref",
-			configText: pollingSourceMissingRefConfigText,
-			wantErr:    true,
-		},
-		{
-			name:       "Error - plugin is not a PollingSource",
-			configText: pollingSourceWrongTypeConfigText,
-			wantErr:    true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			logger := logging.NewTestLogger()
-
-			rawConfig, err := loadRawConfiguration([]byte(tc.configText), logger)
-			require.NoError(t, err, "setup: loadRawConfiguration failed")
-
-			handle := plugin.NewHandle(context.Background(), nil, nil)
-			err = instantiatePlugins(rawConfig.Plugins, handle)
-			require.NoError(t, err, "setup: instantiatePlugins failed")
-
-			sources, err := buildPollingSources(rawConfig.PollingSources, handle)
-
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			require.Len(t, sources, tc.wantLen)
 		})
 	}
 }
@@ -603,6 +542,29 @@ func (m *mockScorer) Score(ctx context.Context, cycleState *plugin.CycleState, r
 	return nil
 }
 
+// Mock Extractor
+type mockExtractor struct{ mockPlugin }
+
+var _ datasource.Extractor = &mockExtractor{}
+
+func (m *mockExtractor) Extract(_ context.Context, _ []datasource.Event) error { return nil }
+
+// Mock Collector
+type mockCollector struct{ mockPlugin }
+
+var _ datasource.Collector = &mockCollector{}
+
+func (m *mockCollector) Poll(_ context.Context) (any, error) { return nil, nil }
+func (m *mockCollector) CollectorFrequency() time.Duration   { return 0 }
+
+// Mock DataSource
+type mockDataSource struct{ mockPlugin }
+
+var _ datasource.DataSource = &mockDataSource{}
+
+func (m *mockDataSource) Start(_ context.Context) error { return nil }
+func (m *mockDataSource) Stop()                         {}
+
 // Mock Picker
 type mockPicker struct{ mockPlugin }
 
@@ -669,6 +631,21 @@ func registerTestPlugins(t *testing.T) {
 		func(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
 			return &mockFilter{mockPlugin{t: plugin.TypedName{Name: name, Type: testFilterType}}}, nil
 		})
+
+	plugin.Register(testExtractorType,
+		func(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+			return &mockExtractor{mockPlugin{t: plugin.TypedName{Name: name, Type: testExtractorType}}}, nil
+		})
+
+	plugin.Register(testCollectorType,
+		func(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+			return &mockCollector{mockPlugin{t: plugin.TypedName{Name: name, Type: testCollectorType}}}, nil
+		})
+
+	plugin.Register(testDataSourceType,
+		func(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+			return &mockDataSource{mockPlugin{t: plugin.TypedName{Name: name, Type: testDataSourceType}}}, nil
+		})
 }
 
 // registerModelSelectorPlugins registers the real model-selector plugin factories used by
@@ -689,9 +666,10 @@ func TestBuildProfilesModelSelectorPlugins(t *testing.T) {
 	registerModelSelectorPlugins(t)
 
 	logger := logging.NewTestLogger()
-	handle := plugin.NewHandle(context.Background(), nil, nil)
+	handle := plugin.NewHandle(context.Background(), nil, nil, nil)
+	processor := datalayerpkg.NewFakeProcessor()
 
-	cfg, err := LoadConfiguration([]byte(modelSelectorAllPluginTypesText), handle, logger)
+	cfg, err := LoadConfiguration([]byte(modelSelectorAllPluginTypesText), handle, processor, logger)
 	require.NoError(t, err, "LoadConfiguration should succeed")
 
 	profile, ok := cfg.Profiles["default"]
@@ -729,9 +707,10 @@ func TestBuildProfilesScorerMissingWeight(t *testing.T) {
 	registerModelSelectorPlugins(t)
 
 	logger := logging.NewTestLogger()
-	handle := plugin.NewHandle(context.Background(), nil, nil)
+	handle := plugin.NewHandle(context.Background(), nil, nil, nil)
+	processor := datalayerpkg.NewFakeProcessor()
 
-	_, err := LoadConfiguration([]byte(modelSelectorScorerMissingWeightText), handle, logger)
+	_, err := LoadConfiguration([]byte(modelSelectorScorerMissingWeightText), handle, processor, logger)
 	require.ErrorContains(t, err, "requires a weight")
 }
 
@@ -741,8 +720,9 @@ func TestBuildProfilesUnknownPluginType(t *testing.T) {
 	registerModelSelectorPlugins(t)
 
 	logger := logging.NewTestLogger()
-	handle := plugin.NewHandle(context.Background(), nil, nil)
+	handle := plugin.NewHandle(context.Background(), nil, nil, nil)
+	processor := datalayerpkg.NewFakeProcessor()
 
-	_, err := LoadConfiguration([]byte(modelSelectorUnknownPluginTypeText), handle, logger)
+	_, err := LoadConfiguration([]byte(modelSelectorUnknownPluginTypeText), handle, processor, logger)
 	require.ErrorContains(t, err, "is not a RequestProcessor, Filter, Scorer, or Picker")
 }
