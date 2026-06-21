@@ -18,6 +18,7 @@ package error
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -171,6 +172,14 @@ func TestCanonicalCode(t *testing.T) {
 			name: "Non-Error type",
 			err:  errors.New("standard go error"),
 			want: Unknown,
+		},
+		// A typed Error wrapped with %w (as ModelSelectorPlugin.ProcessRequest
+		// does) must still resolve to its code, else BuildErrResponse falls back
+		// to a gRPC error instead of the intended HTTP ImmediateResponse.
+		{
+			name: "wrapped Error resolves to its code",
+			err:  fmt.Errorf("model selection failed: %w", Error{Code: ResourceExhausted, Msg: "no models"}),
+			want: ResourceExhausted,
 		},
 		{
 			name: "Nil error",
