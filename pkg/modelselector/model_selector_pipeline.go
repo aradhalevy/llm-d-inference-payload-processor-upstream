@@ -146,9 +146,10 @@ func (p *ModelSelectorPipeline) String() string {
 func (p *ModelSelectorPipeline) Run(ctx context.Context, request *requesthandling.InferenceRequest, cycleState *plugin.CycleState, candidateModels []datalayer.Model) (*modelselector.PipelineRunResult, error) {
 	models := p.runFilterPlugins(ctx, request, cycleState, candidateModels)
 	if len(models) == 0 {
-		// Typed so the handler maps it to an HTTP 400 ImmediateResponse instead
-		// of failing the ext_proc stream.
-		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: "no models available after filtering"}
+		// Typed so the handler maps it to an HTTP ImmediateResponse instead of
+		// failing the ext_proc stream. ResourceExhausted: filters commonly drop
+		// models the user isn't allowed or lacks quota for.
+		return nil, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: "no models available after filtering"}
 	}
 
 	weightedScorePerModel := p.runScorerPlugins(ctx, request, cycleState, models)

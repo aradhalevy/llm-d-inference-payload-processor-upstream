@@ -18,7 +18,6 @@ package modelname
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"testing"
 
@@ -57,74 +56,27 @@ func requestWithModel(field string, value any) *requesthandling.InferenceRequest
 	return r
 }
 
-// TestModelNameFilterFactory verifies the factory's config handling: empty
-// parameters fall back to the default "model" field, a configured
-// requestModelField is honored, invalid JSON is rejected with an error, and
-// the created plugin carries the instance name and registered type.
+// TestModelNameFilterFactory verifies the created plugin carries the instance
+// name and registered type.
 func TestModelNameFilterFactory(t *testing.T) {
-	tests := []struct {
-		name       string
-		pluginName string
-		rawParams  json.RawMessage
-		wantErr    bool
-		wantField  string
-	}{
-		// Omitting the parameters entirely must fall back to inspecting the
-		// default "model" body field.
-		{
-			name:       "empty params defaults to model field",
-			pluginName: "my-filter",
-			rawParams:  json.RawMessage(``),
-			wantField:  defaultRequestModelField,
-		},
-		// A configured requestModelField must replace the default field.
-		{
-			name:       "custom model field",
-			pluginName: "my-filter",
-			rawParams:  json.RawMessage(`{"requestModelField":"requestedModel"}`),
-			wantField:  "requestedModel",
-		},
-		// Parameters that are not valid JSON must fail plugin creation.
-		{
-			name:       "invalid JSON",
-			pluginName: "my-filter",
-			rawParams:  json.RawMessage(`{invalid`),
-			wantErr:    true,
-		},
+	p, err := ModelNameFilterFactory("my-filter", nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p, err := ModelNameFilterFactory(tt.pluginName, tt.rawParams, nil)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			f := p.(*ModelNameFilter)
-			if f.requestModelField != tt.wantField {
-				t.Errorf("requestModelField = %s, want %s", f.requestModelField, tt.wantField)
-			}
-			if got := f.TypedName().Name; got != tt.pluginName {
-				t.Errorf("Name = %s, want %s", got, tt.pluginName)
-			}
-			if got := f.TypedName().Type; got != ModelNameFilterType {
-				t.Errorf("Type = %s, want %s", got, ModelNameFilterType)
-			}
-		})
+	f := p.(*ModelNameFilter)
+	if got := f.TypedName().Name; got != "my-filter" {
+		t.Errorf("Name = %s, want my-filter", got)
+	}
+	if got := f.TypedName().Type; got != ModelNameFilterType {
+		t.Errorf("Type = %s, want %s", got, ModelNameFilterType)
 	}
 }
 
 // TestModelNameFilter_Filter verifies the filtering semantics for every shape
 // the request-body model field can take: a configured name pins the candidates
-// to that model, a string-encoded JSON array keeps only its configured subset,
-// an absent or empty field passes all candidates through, and an unconfigured
-// name or malformed field (non-string type, unparsable or non-string-array
-// encoded value) yields an empty result, which the pipeline turns into a
-// request error.
+// to that model, an absent or empty field passes all candidates through, and an
+// unconfigured name or malformed field (non-string type) yields an empty
+// result, which the pipeline turns into a request error.
 func TestModelNameFilter_Filter(t *testing.T) {
 	registered := []string{"qwen3", "llama3", "mistral"}
 
@@ -167,57 +119,24 @@ func TestModelNameFilter_Filter(t *testing.T) {
 			modelBody: 42,
 			want:      []string{},
 		},
-		// A real JSON array is no longer accepted — the model field must be
-		// a string; the list form is expressed as a string-encoded array.
+		// A real JSON array is not accepted — the model field must be a string.
 		{
 			name:      "JSON array model field yields empty (malformed)",
 			modelBody: []any{"qwen3", "mistral"},
 			want:      []string{},
 		},
-		// A string holding a JSON-encoded array is "choose from the list":
-		// configured names are kept as candidates, unconfigured ones dropped.
+		// A string is matched exactly: an array-looking string is just a
+		// model name that happens not to be configured.
 		{
-			name:      "string-encoded array keeps only the registered ones",
-			modelBody: `["qwen3", "mistral", "gpt-4"]`,
-			want:      []string{"mistral", "qwen3"},
-		},
-		// Leading whitespace before the encoded array is tolerated.
-		{
-			name:      "string-encoded array with leading whitespace is parsed",
-			modelBody: `  ["qwen3"]`,
-			want:      []string{"qwen3"},
-		},
-		// A string-encoded empty array is treated like an absent field.
-		{
-			name:      "string-encoded empty array passes all through",
-			modelBody: `[]`,
-			want:      registered,
-		},
-		// A '['-prefixed string that is not parsable JSON is malformed and
-		// eliminates all candidates.
-		{
-			name:      "string-encoded array with invalid JSON yields empty (malformed)",
-			modelBody: `["qwen3"`,
-			want:      []string{},
-		},
-		// Valid JSON that is not an array of strings (here: a number element)
-		// is malformed as a whole.
-		{
-			name:      "string-encoded array with non-string element yields empty (malformed)",
-			modelBody: `["qwen3", 42]`,
-			want:      []string{},
-		},
-		// A string-encoded array holding an empty-string element is malformed.
-		{
-			name:      "string-encoded array with empty element yields empty (malformed)",
-			modelBody: `["qwen3", ""]`,
+			name:      "array-looking string is matched literally",
+			modelBody: `["qwen3", "mistral"]`,
 			want:      []string{},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := NewModelNameFilter("")
-			req := requestWithModel(defaultRequestModelField, tt.modelBody)
+			f := NewModelNameFilter()
+			req := requestWithModel(requestModelField, tt.modelBody)
 
 			got := names(f.Filter(context.Background(), nil, req, candidateModels(registered...)))
 
@@ -233,17 +152,5 @@ func TestModelNameFilter_Filter(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// TestModelNameFilter_CustomModelField verifies that the filter reads the model
-// name from the configured requestModelField instead of the default "model".
-func TestModelNameFilter_CustomModelField(t *testing.T) {
-	f := NewModelNameFilter("requestedModel")
-	req := requestWithModel("requestedModel", "llama3")
-
-	got := names(f.Filter(context.Background(), nil, req, candidateModels("qwen3", "llama3")))
-	if len(got) != 1 || got[0] != "llama3" {
-		t.Errorf("Filter() = %v, want [llama3]", got)
 	}
 }
