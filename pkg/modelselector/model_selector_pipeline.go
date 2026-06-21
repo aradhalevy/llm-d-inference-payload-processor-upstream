@@ -147,8 +147,7 @@ func (p *ModelSelectorPipeline) Run(ctx context.Context, request *requesthandlin
 	models := p.runFilterPlugins(ctx, request, cycleState, candidateModels)
 	if len(models) == 0 {
 		// Typed so the handler maps it to an HTTP ImmediateResponse instead of
-		// failing the ext_proc stream. ResourceExhausted: filters commonly drop
-		// models the user isn't allowed or lacks quota for.
+		// failing the ext_proc stream.
 		return nil, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: "no models available after filtering"}
 	}
 

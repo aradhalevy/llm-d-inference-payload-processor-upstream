@@ -38,7 +38,6 @@ const (
 	ModelNameFilterType = "model-name-filter"
 
 	// requestModelField is the request-body field holding the requested model name.
-	// Every major LLM HTTP API that carries the model in the JSON body uses "model".
 	requestModelField = "model"
 )
 

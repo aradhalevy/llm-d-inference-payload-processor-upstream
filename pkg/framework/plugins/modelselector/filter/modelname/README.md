@@ -5,9 +5,7 @@ model field is treated as a single model name.
 
 It is registered as type `model-name-filter` and runs as a modelselector filter.
 
-The filter does not read the datalayer. It only matches the requested name against the
-candidate models the pipeline hands it (those candidates having been sourced from the
-datalayer upstream). "Available" below means "present in that candidate list".
+The filter matches the requested name against the candidate models the pipeline hands it from the datalayer. "Available" below means "present in that candidate list".
 
 ## What it does
 
@@ -20,7 +18,3 @@ datalayer upstream). "Available" below means "present in that candidate list".
 
 - The `model` field of the request body.
 - The candidate model list passed in by the pipeline.
-
-## Configuration
-
-None.
