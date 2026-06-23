@@ -10,7 +10,7 @@ The filter matches the requested name against the candidate models the pipeline 
 ## What it does
 
 1. Reads the `model` field from the request body.
-2. When the field holds an available model name, that one model becomes the candidate.
+2. When the field holds an available model name, that one model becomes the single candidate, which de facto means that model is selected (picker doesn't have alternatives).
 3. If the field is absent or an empty string, all incoming candidates are kept.
 4. If the requested model is not available, or the field is malformed (not a string), the filter returns no candidates and the pipeline rejects the request with HTTP 429.
 

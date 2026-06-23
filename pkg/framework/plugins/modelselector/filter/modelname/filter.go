@@ -82,7 +82,7 @@ func (f *ModelNameFilter) Filter(ctx context.Context, _ *plugin.CycleState, requ
 	requested, ok := request.Body[requestModelField].(string)
 	if !ok && request.Body[requestModelField] != nil {
 		logger.V(logutil.VERBOSE).Info("malformed model field in request body, no available model candidates", "field", requestModelField)
-		return nil
+		return []datalayer.Model{}
 	}
 	if requested == "" {
 		logger.V(logutil.VERBOSE).Info("no model in request body. All available models are considered as candidates", "field", requestModelField)
@@ -97,5 +97,5 @@ func (f *ModelNameFilter) Filter(ctx context.Context, _ *plugin.CycleState, requ
 	}
 
 	logger.V(logutil.VERBOSE).Info("request body model is not configured", "requested", requested)
-	return nil
+	return []datalayer.Model{}
 }
