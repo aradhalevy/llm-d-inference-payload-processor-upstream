@@ -17,7 +17,6 @@ limitations under the License.
 package error
 
 import (
-	"errors"
 	"fmt"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -48,11 +47,10 @@ func (e Error) Error() string {
 	return fmt.Sprintf("inference error: %s - %s", e.Code, e.Msg)
 }
 
-// CanonicalCode returns the error's ErrorCode. It unwraps wrapped errors so a
-// typed Error survives an fmt.Errorf("...: %w", err) on the way up.
+// CanonicalCode returns the error's ErrorCode.
 func CanonicalCode(err error) string {
-	var e Error
-	if errors.As(err, &e) {
+	e, ok := err.(Error)
+	if ok {
 		return e.Code
 	}
 	return Unknown

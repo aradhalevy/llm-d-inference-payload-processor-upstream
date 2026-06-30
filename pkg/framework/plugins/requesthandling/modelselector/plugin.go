@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -85,7 +84,7 @@ func (p *ModelSelectorPlugin) ProcessRequest(ctx context.Context, cycleState *pl
 
 	result, err := p.selector.Select(ctx, request, cycleState, candidateModels)
 	if err != nil {
-		return fmt.Errorf("model selection failed: %w", err)
+		return err
 	}
 
 	selectedName := result.TargetModel.GetName()
