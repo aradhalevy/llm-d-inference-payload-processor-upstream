@@ -47,16 +47,19 @@ import (
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/interface/datalayer/datasource"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/interface/plugin"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/interface/requesthandling"
+	modelconfigcollector "github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/datalayer/modelconfigcollector"
 	requestmetadata "github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/datalayer/requestmetadata"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/modelselector/filter/modelname"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/modelselector/picker/maxscore"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/modelselector/picker/random"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/modelselector/picker/weightedrandom"
 	inflightrequestsscorer "github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/modelselector/scorer/inflightrequests"
+	sessionaffinity "github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/modelselector/scorer/sessionaffinity"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/requesthandling/basemodelextractor"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/requesthandling/bodyfieldtoheader"
 	modelselectorplugin "github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/requesthandling/modelselector"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/requesthandling/profilepicker/single"
+	"github.com/llm-d/llm-d-inference-payload-processor/pkg/framework/plugins/responsehandling/modelnametoheader"
 	"github.com/llm-d/llm-d-inference-payload-processor/pkg/metrics"
 	runserver "github.com/llm-d/llm-d-inference-payload-processor/pkg/server"
 	"github.com/llm-d/llm-d-inference-payload-processor/version"
@@ -76,10 +79,16 @@ func NewRunner() *Runner {
 // Runner is used to run payload processor with its plugins
 type Runner struct {
 	payloadProcessorExecutableName string
+	// preProcessors is an array of pre-processing plugins that operate on the request
+	preProcessors []requesthandling.RequestProcessor
 	// profilePicker is the profile picker instantiated as specified in the configuration
 	profilePicker requesthandling.ProfilePicker
 	// profiles is the set of named profiles loaded from the configuration
 	profiles map[string]*requesthandling.Profile
+	// postProcessors is an array of post-processing plugins that operate on the response
+	postProcessors []requesthandling.ResponseProcessor
+	// responseHeadersPostProcessors run during the response-headers phase
+	responseHeadersPostProcessors []requesthandling.ResponseHeadersProcessor
 
 	customCollectors  []prometheus.Collector
 	customControllers []func(client.Client, *ctrlbuilder.Builder) error
@@ -214,11 +223,14 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// Setup ExtProc Server Runner.
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:      opts.GRPCPort,
-		SecureServing: opts.SecureServing,
-		ProfilePicker: r.profilePicker,
-		Profiles:      r.profiles,
-		EventNotifier: r.processor,
+		GrpcPort:                      opts.GRPCPort,
+		SecureServing:                 opts.SecureServing,
+		PreProcessors:                 r.preProcessors,
+		ProfilePicker:                 r.profilePicker,
+		Profiles:                      r.profiles,
+		PostProcessors:                r.postProcessors,
+		ResponseHeadersPostProcessors: r.responseHeadersPostProcessors,
+		EventNotifier:                 r.processor,
 	}
 
 	// Register health server.
@@ -266,8 +278,11 @@ func (r *Runner) loadConfiguration(ctx context.Context, opts *runserver.Options,
 		return err
 	}
 
+	r.preProcessors = theConfig.PreProcessors
 	r.profilePicker = theConfig.ProfilePicker
 	r.profiles = theConfig.Profiles
+	r.postProcessors = theConfig.PostProcessors
+	r.responseHeadersPostProcessors = theConfig.ResponseHeadersPostProcessors
 
 	return nil
 }
@@ -278,6 +293,7 @@ func (r *Runner) registerInTreePlugins() {
 	plugin.Register(bodyfieldtoheader.BodyFieldToHeaderPluginType, bodyfieldtoheader.BodyFieldToHeaderPluginFactory)
 	plugin.Register(basemodelextractor.BaseModelToHeaderPluginType, basemodelextractor.BaseModelToHeaderPluginFactory)
 	plugin.Register(requestmetadata.PluginType, requestmetadata.ExtractorFactory)
+	plugin.Register(modelconfigcollector.PluginType, modelconfigcollector.DatasourceFactory)
 	// register model selector plugins
 	plugin.Register(modelname.ModelNameFilterType, modelname.ModelNameFilterFactory)
 	plugin.Register(random.RandomPickerType, random.RandomPickerFactory)
@@ -285,6 +301,8 @@ func (r *Runner) registerInTreePlugins() {
 	plugin.Register(weightedrandom.WeightedRandomPickerType, weightedrandom.WeightedRandomPickerFactory)
 	plugin.Register(modelselectorplugin.ModelSelectorPluginType, modelselectorplugin.ModelSelectorPluginFactory)
 	plugin.Register(inflightrequestsscorer.PluginType, inflightrequestsscorer.ScorerFactory)
+	plugin.Register(sessionaffinity.PluginType, sessionaffinity.ScorerFactory)
+	plugin.Register(modelnametoheader.PluginType, modelnametoheader.PluginFactory)
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.

@@ -80,10 +80,23 @@ func LoadConfiguration(configBytes []byte, handle plugin.Handle, processor datas
 		return nil, err
 	}
 
-	postProcessors, err := buildPostProcessors(rawConfig.PostProcessing, handle)
+	postProcessors, responseHeadersPostProcessors, err := buildPostProcessors(rawConfig.PostProcessing, handle)
 	if err != nil {
 		logger.Error(err, "failed to load one or more post-processors")
 		return nil, err
+	}
+
+	if len(postProcessors) > 0 {
+		// body post-processors always require full body. it cannot be mixed with profile that is running on chunks.
+		// the framework supports either only full body response processors or chunk response processors.
+		for name, p := range profiles {
+			if len(p.ResponseChunkProcessors) > 0 {
+				return nil, fmt.Errorf("profile %s is using ResponseChunkProcessor plugins while post processor always require full body. the framework must use one type exclusively", name)
+			}
+			// force profile to require buffering even if no chunk processors are configured
+			// to make sure post processors run before chunks are returns to the client
+			p.NeedsResponseBuffering = true
+		}
 	}
 
 	if err = buildDatalayerSources(rawConfig.Datalayer, handle, processor); err != nil {
@@ -97,10 +110,11 @@ func LoadConfiguration(configBytes []byte, handle plugin.Handle, processor datas
 	}
 
 	return &config.Config{
-		ProfilePicker:  profilePicker,
-		Profiles:       profiles,
-		PreProcessors:  preProcessors,
-		PostProcessors: postProcessors,
+		ProfilePicker:                 profilePicker,
+		Profiles:                      profiles,
+		PreProcessors:                 preProcessors,
+		PostProcessors:                postProcessors,
+		ResponseHeadersPostProcessors: responseHeadersPostProcessors,
 	}, nil
 }
 
@@ -214,9 +228,7 @@ func buildProfiles(rawProfiles []configapi.Profile, handle plugin.Handle) (map[s
 			return nil, fmt.Errorf("the profile %s must have one or both of the Request and Response sections", rawProfile.Name)
 		}
 
-		theProfile := requesthandling.Profile{
-			ResponsePlugins: make([]requesthandling.ResponseProcessor, len(rawProfile.Plugins.Response)),
-		}
+		theProfile := requesthandling.Profile{}
 
 		for _, pluginRef := range rawProfile.Plugins.Request {
 			rawPlugin := handle.Plugin(pluginRef.PluginRef)
@@ -245,17 +257,25 @@ func buildProfiles(rawProfiles []configapi.Profile, handle plugin.Handle) (map[s
 			}
 		}
 
-		for idx, pluginRef := range rawProfile.Plugins.Response {
+		for _, pluginRef := range rawProfile.Plugins.Response {
 			rawPlugin := handle.Plugin(pluginRef.PluginRef)
 			if rawPlugin == nil {
 				return nil, fmt.Errorf("there is no plugin named %s", pluginRef.PluginRef)
 			}
-			thePlugin, ok := rawPlugin.(requesthandling.ResponseProcessor)
-			if !ok {
-				return nil, fmt.Errorf("the plugin named %s is not a ResponseProcessor", pluginRef.PluginRef)
+			if bodyPlugin, ok := rawPlugin.(requesthandling.ResponseProcessor); ok {
+				theProfile.ResponsePlugins = append(theProfile.ResponsePlugins, bodyPlugin)
+				continue
 			}
-			theProfile.ResponsePlugins[idx] = thePlugin
+			if chunkPlugin, ok := rawPlugin.(requesthandling.ResponseChunkProcessor); ok {
+				theProfile.ResponseChunkProcessors = append(theProfile.ResponseChunkProcessors, chunkPlugin)
+				continue
+			}
+			return nil, fmt.Errorf("the plugin named %s is not a ResponseProcessor nor ResponseChunkProcessor", pluginRef.PluginRef)
 		}
+		if len(theProfile.ResponsePlugins) > 0 && len(theProfile.ResponseChunkProcessors) > 0 {
+			return nil, fmt.Errorf("profile %s mixes ResponseProcessor and ResponseChunkProcessor plugins — a profile must use one type exclusively", rawProfile.Name)
+		}
+		theProfile.NeedsResponseBuffering = len(theProfile.ResponsePlugins) > 0
 
 		profiles[rawProfile.Name] = &theProfile
 	}
@@ -263,48 +283,57 @@ func buildProfiles(rawProfiles []configapi.Profile, handle plugin.Handle) (map[s
 	return profiles, nil
 }
 
-func buildPreProcessors(rawConfig *configapi.PluginRefList, handle plugin.Handle) ([]requesthandling.PreProcessor, error) {
+func buildPreProcessors(rawConfig *configapi.PluginRefList, handle plugin.Handle) ([]requesthandling.RequestProcessor, error) {
 	if rawConfig == nil || len(rawConfig.Plugins) == 0 {
-		return []requesthandling.PreProcessor{}, nil
+		return []requesthandling.RequestProcessor{}, nil
 	}
 
-	preProcessors := make([]requesthandling.PreProcessor, len(rawConfig.Plugins))
+	preProcessors := make([]requesthandling.RequestProcessor, len(rawConfig.Plugins))
 
 	for idx, pluginRef := range rawConfig.Plugins {
 		rawPlugin := handle.Plugin(pluginRef.PluginRef)
 		if rawPlugin == nil {
 			return nil, fmt.Errorf("the referenced pre-processor plugin %s doesn't exist in the configuration", pluginRef.PluginRef)
 		}
-		if preProcessor, ok := rawPlugin.(requesthandling.PreProcessor); ok {
+		if preProcessor, ok := rawPlugin.(requesthandling.RequestProcessor); ok {
 			preProcessors[idx] = preProcessor
 		} else {
-			return nil, fmt.Errorf("the referenced plugin %s is not a pre-processor", pluginRef.PluginRef)
+			return nil, fmt.Errorf("the referenced plugin %s is not a RequestProcessor", pluginRef.PluginRef)
 		}
 	}
 
 	return preProcessors, nil
 }
 
-func buildPostProcessors(rawConfig *configapi.PluginRefList, handle plugin.Handle) ([]requesthandling.PostProcessor, error) {
+func buildPostProcessors(rawConfig *configapi.PluginRefList, handle plugin.Handle) ([]requesthandling.ResponseProcessor, []requesthandling.ResponseHeadersProcessor, error) {
 	if rawConfig == nil || len(rawConfig.Plugins) == 0 {
-		return []requesthandling.PostProcessor{}, nil
+		return []requesthandling.ResponseProcessor{}, []requesthandling.ResponseHeadersProcessor{}, nil
 	}
 
-	postProcessors := make([]requesthandling.PostProcessor, len(rawConfig.Plugins))
+	var bodyPostProcessors []requesthandling.ResponseProcessor
+	var headersPostProcessors []requesthandling.ResponseHeadersProcessor
 
-	for idx, pluginRef := range rawConfig.Plugins {
+	for _, pluginRef := range rawConfig.Plugins {
 		rawPlugin := handle.Plugin(pluginRef.PluginRef)
 		if rawPlugin == nil {
-			return nil, fmt.Errorf("the referenced post-processor plugin %s doesn't exist in the configuration", pluginRef.PluginRef)
+			return nil, nil, fmt.Errorf("the referenced post-processor plugin %s doesn't exist in the configuration", pluginRef.PluginRef)
 		}
-		if postProcessor, ok := rawPlugin.(requesthandling.PostProcessor); ok {
-			postProcessors[idx] = postProcessor
-		} else {
-			return nil, fmt.Errorf("the referenced plugin %s is not a post-processor", pluginRef.PluginRef)
+
+		placed := false
+		if hp, ok := rawPlugin.(requesthandling.ResponseHeadersProcessor); ok {
+			headersPostProcessors = append(headersPostProcessors, hp)
+			placed = true
+		}
+		if bp, ok := rawPlugin.(requesthandling.ResponseProcessor); ok {
+			bodyPostProcessors = append(bodyPostProcessors, bp)
+			placed = true
+		}
+		if !placed {
+			return nil, nil, fmt.Errorf("the referenced plugin %s is not a ResponseProcessor nor ResponseHeadersProcessor", pluginRef.PluginRef)
 		}
 	}
 
-	return postProcessors, nil
+	return bodyPostProcessors, headersPostProcessors, nil
 }
 
 // buildModelSelector iterates all built profiles and, for each model-selector plugin found in
