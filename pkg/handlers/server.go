@@ -224,9 +224,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 				model, _ := reqCtx.Request.Body["model"].(string)
 				metrics.RecordRequestTTFT(model, reqCtx.ResponseFirstChunkTimestamp.Sub(reqCtx.RequestReceivedTimestamp))
 
-				// Notify the data layer of the completed response. Fired here so
-				// extractors receive the event on both the buffered and streaming
-				// paths, and after ResponseCompleteTimestamp is set.
+				// Notify the data layer of the completed response.
 				s.eventNotifier.Notify(datasource.Event{
 					Type: datasource.ResponseEventType,
 					Payload: datasource.ResponsePayload{
